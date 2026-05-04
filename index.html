@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iCloud 相簿管理</title>
+<style>
+  :root {
+    --bg: #f5f5f7; --card: #fff; --primary: #0071e3; --primary-h: #0077ed;
+    --danger: #ff3b30; --text: #1d1d1f; --sub: #6e6e73; --border: #d2d2d7;
+    --tag-bg: #e8f0fe; --tag-text: #1a73e8; --shadow: 0 2px 12px rgba(0,0,0,.08); --r: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { background: rgba(255,255,255,.85); backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; padding: 0 24px; }
+  .header-inner { max-width: 1200px; margin: 0 auto; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; }
+  .header-actions { display: flex; gap: 8px; }
+
+  .main { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--card); border-radius: var(--r); padding: 20px; box-shadow: var(--shadow); }
+  .stat-value { font-size: 32px; font-weight: 700; color: var(--primary); line-height: 1; }
+  .stat-label { font-size: 13px; color: var(--sub); margin-top: 6px; }
+
+  .toolbar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .search-box { flex: 1; min-width: 220px; position: relative; }
+  .search-box input { width: 100%; padding: 10px 16px 10px 42px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; background: var(--card); color: var(--text); outline: none; transition: border-color .2s; }
+  .search-box input:focus { border-color: var(--primary); }
+  .search-box svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--sub); pointer-events: none; }
+  select { padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; background: var(--card); color: var(--text); outline: none; cursor: pointer; }
+  .btn { padding: 10px 18px; border-radius: 10px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all .2s; white-space: nowrap; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-h); }
+  .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--bg); }
+  .btn-sm { padding: 6px 12px; font-size: 13px; border-radius: 8px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .tag-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tag-pill { padding: 5px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--card); font-size: 13px; cursor: pointer; transition: all .15s; color: var(--sub); }
+  .tag-pill:hover, .tag-pill.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--card); }
+  .view-btn { padding: 8px 14px; border: none; background: none; cursor: pointer; color: var(--sub); transition: all .15s; }
+  .view-btn.active { background: var(--primary); color: #fff; }
+
+  .albums-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .album-card { background: var(--card); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; transition: transform .2s, box-shadow .2s; display: flex; flex-direction: column; }
+  .album-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+  .album-body { padding: 18px; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+  .album-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .album-name { font-size: 16px; font-weight: 600; line-height: 1.3; flex: 1; }
+  .expiry-badge { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; }
+  .expiry-badge.ok    { background: #e6f9ee; color: #1c8a4e; }
+  .expiry-badge.soon  { background: #fff3e0; color: #e65100; }
+  .expiry-badge.urgent{ background: #fde8e8; color: var(--danger); }
+  .expiry-badge.none  { background: var(--bg); color: var(--sub); }
+  .album-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 12px; color: var(--text); }
+  .chip-icon { font-size: 13px; }
+  .album-desc { font-size: 13px; color: var(--sub); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.5; }
+  .album-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { padding: 3px 10px; border-radius: 20px; background: var(--tag-bg); color: var(--tag-text); font-size: 12px; font-weight: 500; cursor: pointer; }
+  .album-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 4px; }
+
+  .albums-list { background: var(--card); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+  .list-header { display: grid; grid-template-columns: 2fr 3fr 1.5fr 1fr auto; gap: 12px; padding: 12px 20px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--sub); text-transform: uppercase; letter-spacing: .05em; }
+  .list-row { display: grid; grid-template-columns: 2fr 3fr 1.5fr 1fr auto; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); align-items: center; transition: background .15s; }
+  .list-row:last-child { border-bottom: none; }
+  .list-row:hover { background: var(--bg); }
+  .list-link { font-size: 13px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .list-date { font-size: 13px; color: var(--sub); }
+  .list-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+  /* Modal */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(4px); }
+  .modal { background: var(--card); border-radius: 18px; width: 100%; max-width: 540px; max-height: 90vh; overflow-y: auto; box-shadow: 0 24px 80px rgba(0,0,0,.2); animation: modalIn .2s ease-out; }
+  @keyframes modalIn { from { opacity:0; transform:scale(.95) translateY(10px); } to { opacity:1; transform:none; } }
+  .modal-header { padding: 24px 24px 0; display: flex; justify-content: space-between; align-items: center; }
+  .modal-title { font-size: 20px; font-weight: 700; }
+  .modal-close { width: 32px; height: 32px; border: none; background: var(--bg); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--sub); }
+  .modal-close:hover { background: var(--border); }
+  .modal-body { padding: 24px; }
+  .form-group { margin-bottom: 18px; }
+  .form-label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+  .form-input, .form-textarea { width: 100%; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; color: var(--text); background: var(--card); outline: none; transition: border-color .2s; }
+  .form-input:focus, .form-textarea:focus { border-color: var(--primary); }
+  .form-textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
+  .form-hint { font-size: 12px; color: var(--sub); margin-top: 5px; }
+  .form-row { display: flex; gap: 10px; }
+  .form-row .form-group { flex: 1; }
+  .tags-input-wrap { display: flex; gap: 8px; }
+  .tags-input-wrap input { flex: 1; }
+  .tags-preview { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tag-remove { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: var(--tag-bg); color: var(--tag-text); border-radius: 20px; font-size: 12px; cursor: pointer; border: none; font-family: inherit; }
+  .tag-remove:hover { background: #fde8e8; color: var(--danger); }
+  .modal-footer { padding: 0 24px 24px; display: flex; justify-content: flex-end; gap: 10px; }
+
+  /* Scrape result banner */
+  .scrape-result { background: #f0faf4; border: 1px solid #a8e6bf; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; display: none; }
+  .scrape-result.show { display: block; }
+  .scrape-result .label { font-weight: 600; color: #1c8a4e; margin-bottom: 6px; }
+  .scrape-result .items { display: flex; gap: 16px; flex-wrap: wrap; }
+  .scrape-result .item { color: var(--text); }
+  .scrape-result .item span { color: var(--sub); }
+  .scrape-btn-wrap { display: flex; gap: 8px; }
+  .scrape-btn-wrap input { flex: 1; }
+
+  /* Toast */
+  .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 300; display: flex; flex-direction: column; gap: 10px; }
+  .toast { background: #1d1d1f; color: #fff; padding: 12px 18px; border-radius: 12px; font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.2); animation: toastIn .3s ease-out; display: flex; align-items: center; gap: 8px; }
+  @keyframes toastIn { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
+  .toast.success { background: #1c8a4e; }
+  .toast.error { background: var(--danger); }
+
+  .empty { text-align: center; padding: 80px 20px; color: var(--sub); }
+  .empty svg { margin-bottom: 16px; opacity: .4; }
+  .empty h3 { font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .empty p { font-size: 14px; margin-bottom: 20px; }
+
+  .count-badge { background: var(--primary); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
+
+  @media (max-width: 640px) {
+    .list-header, .list-row { grid-template-columns: 1fr auto; }
+    .list-header .col-link, .list-header .col-tags, .list-header .col-date,
+    .list-row .list-link, .list-row .list-tags, .list-row .list-date { display: none; }
+    .albums-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.42c1.32.07 2.23.73 3 .79.97-.19 1.9-.87 3.06-.93 1.98-.11 3.46.87 4.14 2.21-3.7 2.27-3.09 7.42.8 8.79z" fill="#555"/><path d="M12 7.3c-.14-2.42 1.82-4.42 4.1-4.3.3 2.73-2.47 4.73-4.1 4.3z" fill="#555"/></svg>
+      iCloud 相簿管理
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" onclick="exportData()">⬇ 匯出</button>
+      <label class="btn btn-secondary btn-sm" style="cursor:pointer">⬆ 匯入<input type="file" accept=".json" style="display:none" onchange="importData(event)"></label>
+      <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ 新增相簿</button>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+  <div class="stats" id="statsBar">
+    <div class="stat-card"><div class="stat-value" id="statTotal">…</div><div class="stat-label">總相簿數</div></div>
+    <div class="stat-card"><div class="stat-value" id="statTags">…</div><div class="stat-label">標籤種類</div></div>
+    <div class="stat-card"><div class="stat-value" id="statExpiring">…</div><div class="stat-label">即將到期（30天內）</div></div>
+    <div class="stat-card"><div class="stat-value" id="statRecent">—</div><div class="stat-label">最近新增</div></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-box">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="搜尋名稱、分享者、描述…" oninput="renderAlbums()">
+    </div>
+    <select id="sortSelect" onchange="renderAlbums()">
+      <option value="date_desc">最新新增</option>
+      <option value="date_asc">最舊新增</option>
+      <option value="name_asc">名稱 A→Z</option>
+      <option value="expiry_asc">到期日最近</option>
+    </select>
+    <div class="view-toggle">
+      <button class="view-btn active" id="viewGrid" onclick="setView('grid')" title="格狀">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </button>
+      <button class="view-btn" id="viewList" onclick="setView('list')" title="列表">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="3" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg>
+      </button>
+    </div>
+    <button class="btn btn-primary" onclick="openAddModal()">+ 新增</button>
+  </div>
+
+  <div class="tag-filters" id="tagFilters"></div>
+  <div id="albumsContainer"></div>
+</main>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="albumModal" style="display:none" onclick="closeModalOnBackdrop(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle">新增相簿連結</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editId">
+
+      <div class="form-group">
+        <label class="form-label">iCloud 分享連結 <span style="color:var(--danger)">*</span></label>
+        <div class="scrape-btn-wrap">
+          <input class="form-input" type="url" id="fieldLink" placeholder="https://share.icloud.com/photos/...">
+          <button class="btn btn-secondary btn-sm" id="scrapeBtn" onclick="scrapeLink()">🔍 自動抓取</button>
+        </div>
+        <div class="form-hint">貼上連結後點「自動抓取」可讀取分享者、數量、到期日</div>
+      </div>
+
+      <!-- Auto-fetched info banner -->
+      <div class="scrape-result" id="scrapeResult">
+        <div class="label">✓ 已抓取到資訊</div>
+        <div class="items" id="scrapeItems"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">相簿名稱 <span style="color:var(--danger)">*</span></label>
+        <input class="form-input" type="text" id="fieldName" placeholder="例：2024 日本旅遊">
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">分享者</label>
+          <input class="form-input" type="text" id="fieldSharedBy" placeholder="自動填入或手動輸入">
+        </div>
+        <div class="form-group">
+          <label class="form-label">到期日</label>
+          <input class="form-input" type="text" id="fieldExpiry" placeholder="例：5月31日">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">項目數量</label>
+          <input class="form-input" type="text" id="fieldItemCount" placeholder="例：12">
+        </div>
+        <div class="form-group">
+          <label class="form-label">媒體類型</label>
+          <input class="form-input" type="text" id="fieldMediaType" placeholder="例：3 部影片">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">標籤</label>
+        <div class="tags-input-wrap">
+          <input class="form-input" type="text" id="tagInput" placeholder="輸入後按 Enter" onkeydown="handleTagKey(event)">
+          <button class="btn btn-secondary" onclick="addTag()">新增</button>
+        </div>
+        <div class="tags-preview" id="tagsPreview"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" id="saveBtn" onclick="saveAlbum()">💾 儲存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────
+let albums = [];
+let currentView = 'grid';
+let activeTag = null;
+let currentTags = [];
+
+// ── API ───────────────────────────────────────────────────────
+const BASE = 'https://apple.yaja168.com';
+const api = {
+  async get(path) { const r = await fetch(BASE + path); return r.json(); },
+  async post(path, body) { const r = await fetch(BASE + path, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }); return r.json(); },
+  async put(path, body) { const r = await fetch(BASE + path, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) }); return r.json(); },
+  async del(path) { const r = await fetch(BASE + path, { method: 'DELETE' }); return r.json(); },
+};
+
+async function loadAlbums() {
+  try { albums = await api.get('/api/albums'); renderAlbums(); }
+  catch { toast('無法連線到伺服器', 'error'); }
+}
+
+// ── Scrape ────────────────────────────────────────────────────
+async function scrapeLink() {
+  const url = document.getElementById('fieldLink').value.trim();
+  if (!url) { toast('請先貼上 iCloud 連結', 'error'); return; }
+  const btn = document.getElementById('scrapeBtn');
+  btn.disabled = true; btn.textContent = '抓取中…';
+  try {
+    const data = await api.post('/api/scrape', { url });
+    if (data.ok) {
+      if (data.sharedBy) document.getElementById('fieldSharedBy').value = data.sharedBy;
+      if (data.expiryDate) document.getElementById('fieldExpiry').value = data.expiryDate;
+      if (data.itemCount) document.getElementById('fieldItemCount').value = data.itemCount;
+      if (data.mediaType) document.getElementById('fieldMediaType').value = data.mediaType;
+
+      // Show banner
+      const items = [];
+      if (data.sharedBy) items.push(`<div class="item">分享者：<span>${esc(data.sharedBy)}</span></div>`);
+      if (data.itemCount) items.push(`<div class="item">數量：<span>${data.itemCount} 個項目</span></div>`);
+      if (data.mediaType) items.push(`<div class="item">類型：<span>${esc(data.mediaType)}</span></div>`);
+      if (data.expiryDate) items.push(`<div class="item">到期：<span>${esc(data.expiryDate)}</span></div>`);
+      document.getElementById('scrapeItems').innerHTML = items.join('');
+      document.getElementById('scrapeResult').classList.add('show');
+      toast('資訊抓取成功！', 'success');
+    } else {
+      toast('抓取失敗：' + (data.error || '未知錯誤'), 'error');
+    }
+  } catch (e) {
+    toast('抓取失敗', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 自動抓取';
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────
+function getAllTags() {
+  const s = new Set();
+  albums.forEach(a => (a.tags || []).forEach(t => s.add(t)));
+  return [...s].sort();
+}
+
+function getExpiringSoon() {
+  const now = Date.now(); const day = 86400000;
+  return albums.filter(a => {
+    if (!a.expiryDate) return false;
+    const d = parseExpiryDate(a.expiryDate);
+    return d && (d - now) < 30 * day && (d - now) > 0;
+  }).length;
+}
+
+function parseExpiryDate(str) {
+  if (!str) return null;
+  const m = str.match(/(\d+)月(\d+)日/);
+  if (!m) return null;
+  const now = new Date();
+  let year = now.getFullYear();
+  const d = new Date(year, parseInt(m[1]) - 1, parseInt(m[2]));
+  if (d < now) d.setFullYear(year + 1);
+  return d;
+}
+
+function renderStats() {
+  document.getElementById('statTotal').textContent = albums.length;
+  document.getElementById('statTags').textContent = getAllTags().length;
+  document.getElementById('statExpiring').textContent = getExpiringSoon();
+  if (albums.length > 0) {
+    const latest = albums.reduce((a, b) => a.createdAt > b.createdAt ? a : b);
+    document.getElementById('statRecent').textContent = formatDate(latest.createdAt, true);
+  } else {
+    document.getElementById('statRecent').textContent = '—';
+  }
+}
+
+function renderTagFilters() {
+  const tags = getAllTags();
+  const w = document.getElementById('tagFilters');
+  if (!tags.length) { w.innerHTML = ''; return; }
+  w.innerHTML = `<span class="tag-pill ${!activeTag?'active':''}" onclick="setTagFilter(null)">全部 <span class="count-badge">${albums.length}</span></span>` +
+    tags.map(t => {
+      const c = albums.filter(a => (a.tags||[]).includes(t)).length;
+      return `<span class="tag-pill ${activeTag===t?'active':''}" onclick="setTagFilter('${esc(t)}')">${esc(t)} <span class="count-badge">${c}</span></span>`;
+    }).join('');
+}
+
+function setTagFilter(tag) { activeTag = tag; renderTagFilters(); renderAlbums(); }
+
+function getFiltered() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const sort = document.getElementById('sortSelect').value;
+  let list = albums.filter(a => {
+    const mq = !q || a.name?.toLowerCase().includes(q) || (a.desc||'').toLowerCase().includes(q) || a.link.toLowerCase().includes(q) || (a.sharedBy||'').toLowerCase().includes(q);
+    const mt = !activeTag || (a.tags||[]).includes(activeTag);
+    return mq && mt;
+  });
+  list.sort((a, b) => {
+    if (sort === 'date_desc') return b.createdAt - a.createdAt;
+    if (sort === 'date_asc')  return a.createdAt - b.createdAt;
+    if (sort === 'name_asc')  return (a.name||'').localeCompare(b.name||'', 'zh-TW');
+    if (sort === 'expiry_asc') {
+      const da = parseExpiryDate(a.expiryDate), db = parseExpiryDate(b.expiryDate);
+      if (!da && !db) return 0; if (!da) return 1; if (!db) return -1;
+      return da - db;
+    }
+    return 0;
+  });
+  return list;
+}
+
+function renderAlbums() {
+  renderStats(); renderTagFilters();
+  const list = getFiltered();
+  const c = document.getElementById('albumsContainer');
+
+  if (!albums.length) {
+    c.innerHTML = `<div class="empty"><svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><h3>還沒有相簿連結</h3><p>點擊「新增相簿」開始管理你的 iCloud 分享連結</p><button class="btn btn-primary" onclick="openAddModal()">新增第一個相簿</button></div>`;
+    return;
+  }
+  if (!list.length) {
+    c.innerHTML = `<div class="empty"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><h3>找不到符合的相簿</h3><p>試試其他關鍵字</p></div>`;
+    return;
+  }
+
+  if (currentView === 'grid') {
+    c.innerHTML = `<div class="albums-grid">${list.map(cardHTML).join('')}</div>`;
+  } else {
+    c.innerHTML = `<div class="albums-list">
+      <div class="list-header"><span>名稱</span><span class="col-link">連結</span><span class="col-tags">標籤</span><span class="col-date">新增日期</span><span>操作</span></div>
+      ${list.map(rowHTML).join('')}
+    </div>`;
+  }
+}
+
+function expiryBadgeHTML(a) {
+  if (!a.expiryDate) return `<span class="expiry-badge none">無到期日</span>`;
+  const d = parseExpiryDate(a.expiryDate);
+  if (!d) return `<span class="expiry-badge none">📅 ${esc(a.expiryDate)}</span>`;
+  const days = Math.ceil((d - Date.now()) / 86400000);
+  if (days <= 0) return `<span class="expiry-badge urgent">已過期</span>`;
+  const cls = days <= 7 ? 'urgent' : days <= 30 ? 'soon' : 'ok';
+  const label = days <= 30 ? `${days} 天後到期` : `${esc(a.expiryDate)}`;
+  return `<span class="expiry-badge ${cls}">📅 ${label}</span>`;
+}
+
+function cardHTML(a) {
+  const chips = [];
+  if (a.sharedBy)  chips.push(`<span class="chip"><span class="chip-icon">👤</span>${esc(a.sharedBy)}</span>`);
+  if (a.itemCount) chips.push(`<span class="chip"><span class="chip-icon">📁</span>${esc(a.itemCount)} 個項目</span>`);
+  if (a.mediaType) chips.push(`<span class="chip"><span class="chip-icon">🎬</span>${esc(a.mediaType)}</span>`);
+  if (!chips.length && !a.expiryDate) chips.push(`<span class="chip" style="color:var(--sub)">新增 ${formatDate(a.createdAt)}</span>`);
+
+  return `<div class="album-card">
+    <div class="album-body">
+      <div class="album-header">
+        <div class="album-name">${esc(a.name)}</div>
+        ${expiryBadgeHTML(a)}
+      </div>
+      ${chips.length ? `<div class="album-chips">${chips.join('')}</div>` : ''}
+      ${a.desc ? `<div class="album-desc">${esc(a.desc)}</div>` : ''}
+      ${(a.tags||[]).length ? `<div class="album-tags">${a.tags.map(t=>`<span class="tag" onclick="setTagFilter('${esc(t)}')">${esc(t)}</span>`).join('')}</div>` : ''}
+      <div class="album-actions">
+        <button class="btn btn-primary btn-sm" onclick="openLink('${esc(a.link)}')">開啟</button>
+        <button class="btn btn-secondary btn-sm" onclick="copyLink('${esc(a.link)}')">複製</button>
+        <button class="btn btn-secondary btn-sm" onclick="openEditModal('${a.id}')">✏️</button>
+        <button class="btn btn-sm" style="background:#fff0f0;color:var(--danger)" onclick="deleteAlbum('${a.id}')">🗑</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function rowHTML(a) {
+  return `<div class="list-row">
+    <div style="font-weight:500">${esc(a.name)}</div>
+    <div class="list-link col-link" title="${esc(a.link)}">${esc(a.link)}</div>
+    <div class="list-tags col-tags">${(a.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>
+    <div class="list-date col-date">${formatDate(a.createdAt)}</div>
+    <div class="list-actions">
+      <button class="btn btn-primary btn-sm" onclick="openLink('${esc(a.link)}')">開啟</button>
+      <button class="btn btn-secondary btn-sm" onclick="copyLink('${esc(a.link)}')">複製</button>
+      <button class="btn btn-secondary btn-sm" onclick="openEditModal('${a.id}')">✏️</button>
+      <button class="btn btn-sm" style="background:#fff0f0;color:var(--danger)" onclick="deleteAlbum('${a.id}')">🗑</button>
+    </div>
+  </div>`;
+}
+
+function thumbSVG() {
+  return `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#a0aec0" stroke-width="1.2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+}
+
+function setView(v) {
+  currentView = v;
+  document.getElementById('viewGrid').classList.toggle('active', v === 'grid');
+  document.getElementById('viewList').classList.toggle('active', v === 'list');
+  renderAlbums();
+}
+
+// ── Modal ─────────────────────────────────────────────────────
+function openAddModal() {
+  currentTags = [];
+  ['editId','fieldLink','fieldName','fieldSharedBy','fieldExpiry','fieldItemCount','fieldMediaType','tagInput'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('scrapeResult').classList.remove('show');
+  document.getElementById('modalTitle').textContent = '新增相簿連結';
+  renderTagsPreview();
+  document.getElementById('albumModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('fieldLink').focus(), 100);
+}
+
+function openEditModal(id) {
+  const a = albums.find(x => x.id === id);
+  if (!a) return;
+  currentTags = [...(a.tags || [])];
+  document.getElementById('editId').value = id;
+  document.getElementById('fieldLink').value = a.link;
+  document.getElementById('fieldName').value = a.name;
+  document.getElementById('fieldSharedBy').value = a.sharedBy || '';
+  document.getElementById('fieldExpiry').value = a.expiryDate || '';
+  document.getElementById('fieldItemCount').value = a.itemCount || '';
+  document.getElementById('fieldMediaType').value = a.mediaType || '';
+  document.getElementById('tagInput').value = '';
+  document.getElementById('scrapeResult').classList.remove('show');
+  document.getElementById('modalTitle').textContent = '編輯相簿連結';
+  renderTagsPreview();
+  document.getElementById('albumModal').style.display = 'flex';
+}
+
+function closeModal() { document.getElementById('albumModal').style.display = 'none'; }
+function closeModalOnBackdrop(e) { if (e.target.id === 'albumModal') closeModal(); }
+
+function handleTagKey(e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTag(); } }
+function addTag() {
+  const v = document.getElementById('tagInput').value.trim().replace(/\s+/g,'_');
+  if (!v || currentTags.includes(v)) { document.getElementById('tagInput').value = ''; return; }
+  currentTags.push(v); document.getElementById('tagInput').value = ''; renderTagsPreview();
+}
+function removeTag(t) { currentTags = currentTags.filter(x => x !== t); renderTagsPreview(); }
+function renderTagsPreview() {
+  document.getElementById('tagsPreview').innerHTML = currentTags.map(t =>
+    `<button class="tag-remove" onclick="removeTag('${esc(t)}')">${esc(t)} ✕</button>`
+  ).join('');
+}
+
+// ── CRUD ──────────────────────────────────────────────────────
+async function saveAlbum() {
+  const id = document.getElementById('editId').value;
+  const link = document.getElementById('fieldLink').value.trim();
+  const name = document.getElementById('fieldName').value.trim();
+  if (!link) { toast('請輸入 iCloud 連結', 'error'); return; }
+  if (!name) { toast('請輸入相簿名稱', 'error'); return; }
+
+  const payload = {
+    link, name,
+    sharedBy: document.getElementById('fieldSharedBy').value.trim(),
+    expiryDate: document.getElementById('fieldExpiry').value.trim(),
+    itemCount: document.getElementById('fieldItemCount').value.trim(),
+    mediaType: document.getElementById('fieldMediaType').value.trim(),
+    tags: [...currentTags],
+  };
+
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  try {
+    if (id) {
+      const updated = await api.put(`/api/albums/${id}`, payload);
+      albums = albums.map(a => a.id === id ? updated : a);
+      toast('已更新', 'success');
+    } else {
+      const created = await api.post('/api/albums', payload);
+      albums.unshift(created);
+      toast('已新增', 'success');
+    }
+    closeModal(); renderAlbums();
+  } catch { toast('儲存失敗', 'error'); }
+  finally { btn.disabled = false; }
+}
+
+async function deleteAlbum(id) {
+  const a = albums.find(x => x.id === id);
+  if (!a || !confirm(`確定刪除「${a.name}」？`)) return;
+  await api.del(`/api/albums/${id}`);
+  albums = albums.filter(x => x.id !== id);
+  renderAlbums(); toast('已刪除');
+}
+
+// ── Actions ───────────────────────────────────────────────────
+function openLink(url) { window.open(url, '_blank'); }
+function copyLink(url) {
+  navigator.clipboard.writeText(url).then(() => toast('已複製', 'success')).catch(() => {
+    const el = document.createElement('textarea');
+    el.value = url; document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el);
+    toast('已複製', 'success');
+  });
+}
+
+// ── Import / Export ───────────────────────────────────────────
+function exportData() {
+  const blob = new Blob([JSON.stringify(albums, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `icloud_albums_${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('已匯出', 'success');
+}
+
+async function importData(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const text = await file.text();
+  try {
+    const imported = JSON.parse(text);
+    if (!Array.isArray(imported)) throw new Error();
+    const existingIds = new Set(albums.map(a => a.id));
+    let added = 0;
+    for (const item of imported.filter(a => a.name && a.link)) {
+      if (!item.id || existingIds.has(item.id)) item.id = uid();
+      await api.post('/api/albums', item);
+      added++;
+    }
+    await loadAlbums();
+    toast(`匯入完成，新增 ${added} 筆`, 'success');
+  } catch { toast('匯入失敗', 'error'); }
+  e.target.value = '';
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function formatDate(ts, short) {
+  if (!ts) return ''; const d = new Date(ts);
+  return short ? `${d.getMonth()+1}/${d.getDate()}` : `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function toast(msg, type = '') {
+  const c = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${type==='success'?'✓':type==='error'?'✕':'ℹ'}</span><span>${msg}</span>`;
+  c.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transform='translateY(20px)'; el.style.transition='.3s'; setTimeout(()=>el.remove(),300); }, 2500);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if ((e.metaKey||e.ctrlKey) && e.key==='n') { e.preventDefault(); openAddModal(); }
+});
+
+loadAlbums();
+</script>
+</body>
+</html>
